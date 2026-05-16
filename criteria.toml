@@ -1,0 +1,35 @@
+# Search criteria for the Real Estate AI Agent.
+# Edit this file to change what gets scraped, verified, and ranked.
+
+[search]
+city = "Pune"
+bhk = [2.5, 3]
+budget_min_cr = 1.0
+budget_max_cr = 1.5
+property_status = ["new", "resale"]  # new construction or resale
+
+# Anchor for proximity scoring (lat/lng of EON IT Park, Kharadi).
+[proximity]
+anchor_name = "EON IT Park, Kharadi"
+anchor_lat = 18.5515
+anchor_lng = 73.9530
+max_distance_km = 6.0
+
+# Locality whitelist (case-insensitive substring match against listing locality).
+[localities]
+include = [
+    "Kharadi",
+    "Wagholi",
+    "Chandan Nagar",
+    "Vimannagar",
+    "Viman Nagar",
+    "Keshav Nagar",
+    "Mundhwa",
+]
+
+# Per-check weights for the composite score (must sum to ~1.0).
+[scoring]
+rera_match = 0.40
+pricing = 0.25
+legal = 0.20
+locality_fit = 0.15

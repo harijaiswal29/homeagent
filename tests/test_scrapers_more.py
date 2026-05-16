@@ -4,8 +4,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from homeagent.scrapers.magicbricks import MagicbricksScraper
+import pytest
+
+from homeagent.scrapers.magicbricks import MagicbricksScraper, _area_from_url
 from homeagent.scrapers.ninetynineacres import NinetyNineAcresScraper
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        (
+            "https://www.magicbricks.com/propertyDetails/3-BHK-1140-Sq-ft-Multistorey-Apartment-FOR-Sale-Wagholi-in-Pune&id=4d4235343136373931",
+            1140.0,
+        ),
+        (
+            "https://www.magicbricks.com/propertyDetails/2-BHK-889-Sq-ft-Apt-Kharadi&id=xyz",
+            889.0,
+        ),
+        ("https://www.magicbricks.com/no-area-here", None),
+    ],
+)
+def test_area_from_url(url, expected):
+    assert _area_from_url(url) == expected
 
 
 def test_magicbricks_search_parse(fixtures_dir: Path):

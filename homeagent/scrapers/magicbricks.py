@@ -22,6 +22,15 @@ log = logging.getLogger(__name__)
 BASE = "https://www.magicbricks.com"
 
 
+def _area_from_url(url: str) -> float | None:
+    """Magicbricks URLs embed the area: `.../3-BHK-1140-Sq-ft-Multistorey-Apartment-...`.
+
+    Used as a fallback when the JSON-LD `floorSize` is absent.
+    """
+    m = re.search(r"(\d+(?:\.\d+)?)-Sq-ft", url, re.I)
+    return float(m.group(1)) if m else None
+
+
 def _jsonld_products(tree: HTMLParser) -> list[dict]:
     out: list[dict] = []
     for node in tree.css('script[type="application/ld+json"]'):
@@ -33,7 +42,7 @@ def _jsonld_products(tree: HTMLParser) -> list[dict]:
         for d in candidates:
             if not isinstance(d, dict):
                 continue
-            if d.get("@type") in {"Product", "Residence", "ItemList"}:
+            if d.get("@type") in {"Product", "Residence", "Apartment", "ItemList"}:
                 out.append(d)
     return out
 
@@ -71,21 +80,87 @@ class MagicbricksScraper:
         return self.parse_detail(html, url=url)
 
     def parse_search_results(self, html: str) -> list[RawListing]:
+        """Parse search results.
+
+        Magicbricks emits two parallel JSON-LD shapes per result page: a single ItemList of
+        url+name pairs, and one Apartment block per listing carrying address.addressLocality
+        plus geo. We harvest both and dedupe by URL, preferring the Apartment-derived row since
+        it has the locality we need for filtering.
+
+        Price and project_name aren't in JSON-LD — those live in the rendered card DOM
+        (.mb-srp__card__price--amount and .mb-srp__card__developer--name--highlight). We walk
+        the cards as a second pass and merge by pdpid.
+        """
         tree = HTMLParser(html)
-        out: list[RawListing] = []
+        by_url: dict[str, RawListing] = {}
 
         for block in _jsonld_products(tree):
-            if block.get("@type") == "ItemList":
+            btype = block.get("@type")
+            if btype == "ItemList":
                 for item in block.get("itemListElement", []) or []:
                     inner = item.get("item") if isinstance(item.get("item"), dict) else item
                     raw = self._from_jsonld(inner)
-                    if raw:
-                        out.append(raw)
-            elif block.get("@type") in {"Product", "Residence"}:
+                    if raw and raw.url not in by_url:
+                        by_url[raw.url] = raw
+            elif btype in {"Product", "Residence", "Apartment"}:
                 raw = self._from_jsonld(block)
                 if raw:
-                    out.append(raw)
-        return out
+                    # Apartment blocks are richer (have locality); always prefer them.
+                    by_url[raw.url] = raw
+
+        # Second pass: merge price / project_name / area from the rendered card DOM.
+        self._merge_card_dom(tree, by_url)
+        return list(by_url.values())
+
+    def _merge_card_dom(self, tree: HTMLParser, by_url: dict[str, RawListing]) -> None:
+        """Enrich JSON-LD-derived listings with price + project name from the visible cards.
+
+        Cards are matched to listings by the numeric MB id. Cards expose it on a wrapper
+        element as ``id="propertiesAction{NNNN}"``; the JSON-LD URL embeds it hex-encoded
+        as ``&id={hex("MB" + NNNN)}``.
+        """
+        # Build url → MB-id index by decoding the JSON-LD url's hex blob
+        by_mbid: dict[str, RawListing] = {}
+        for url, raw in by_url.items():
+            m = re.search(r"[?&]id=([a-f0-9]+)", url)
+            if not m:
+                continue
+            try:
+                decoded = bytes.fromhex(m.group(1)).decode("ascii")
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if decoded.startswith("MB"):
+                by_mbid[decoded[2:]] = raw
+
+        for card in tree.css("div.mb-srp__card"):
+            wrapper = card.css_first('[id^="propertiesAction"]')
+            if not wrapper:
+                continue
+            mbid = wrapper.attributes.get("id", "").removeprefix("propertiesAction")
+            raw = by_mbid.get(mbid)
+            if raw is None:
+                continue
+
+            if raw.price_inr is None:
+                price_node = card.css_first(".mb-srp__card__price--amount")
+                if price_node:
+                    raw.price_inr = _parse_inr(price_node.text(strip=True))
+
+            if raw.built_up_area_sqft is None:
+                raw.built_up_area_sqft = _area_from_url(raw.url)
+
+            # Clean project name from the developer / society chip — flows through
+            # _raw_to_listing into listing.raw["project_name"] which the RERA check prefers
+            # over noisy title parsing. Magicbricks uses two layouts: "luxury" cards expose it
+            # via developer--name--highlight; standard cards via card__society.
+            if not raw.project_name:
+                proj_node = card.css_first(
+                    ".mb-srp__card__developer--name--highlight, .mb-srp__card__society"
+                )
+                if proj_node:
+                    pname = proj_node.text(strip=True)
+                    if pname:
+                        raw.project_name = pname
 
     def parse_detail(self, html: str, url: str) -> RawListing:
         tree = HTMLParser(html)

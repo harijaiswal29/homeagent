@@ -28,7 +28,11 @@ BASE = "https://www.nobroker.in"
 
 
 def _parse_inr(text: str) -> int | None:
-    """Parse Indian price strings like '₹1.25 Cr', '95 Lakh', '1,25,00,000'."""
+    """Parse Indian price strings like '₹1.25 Cr', '95 Lakh', '1,25,00,000'.
+
+    A bare number with no unit suffix is only accepted if it's ≥1 lakh — otherwise
+    leading digits from titles like "3 BHK Apartment..." would be mis-read as a price.
+    """
     if not text:
         return None
     t = text.replace("₹", "").replace(",", "").strip().lower()
@@ -43,6 +47,8 @@ def _parse_inr(text: str) -> int | None:
         return int(value * 100_000)
     if unit == "k":
         return int(value * 1_000)
+    if value < 100_000:
+        return None
     return int(value)
 
 

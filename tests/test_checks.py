@@ -7,6 +7,7 @@ import pytest
 from homeagent import db
 from homeagent.config import Proximity, SearchCriteria
 from homeagent.models import Listing, RERAEntry
+from homeagent.verification.rera_check import _clean_project_name
 from homeagent.verification.registry import (
     CheckResult,
     discover_checks,
@@ -14,6 +15,20 @@ from homeagent.verification.registry import (
     register_check,
     run_check,
 )
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Godrej Ivara", "Godrej Ivara"),
+        ("Godrej Ivara Pune", "Godrej Ivara"),
+        ("Godrej Ivara, Kharadi Pune", "Godrej Ivara, Kharadi"),
+        ("Lodha Giardino (Phase 1)", "Lodha Giardino"),
+        ("Pristine Allure  Pune  ", "Pristine Allure"),
+    ],
+)
+def test_clean_project_name(raw, expected):
+    assert _clean_project_name(raw) == expected
 
 
 @pytest.fixture(scope="module", autouse=True)

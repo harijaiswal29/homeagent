@@ -5,24 +5,41 @@ Wraps `homeagent.verification.rera.lookup_project` and translates the result int
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from homeagent.models import Listing, Project
 from homeagent.verification import rera
 from homeagent.verification.registry import CheckResult, register_check
 
+# Suffixes commonly tacked onto listing titles that should be stripped before querying RERA.
+# RERA registrations use just the project name (e.g. "Godrej Ivara"), not "Godrej Ivara Pune"
+# or "Godrej Ivara, Kharadi Pune".
+_CITY_SUFFIXES = (" Pune", " Mumbai", " Thane", " Nashik", " Nagpur")
+_PARENTHETICAL = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def _clean_project_name(name: str) -> str:
+    """Strip city/phase/tower noise from a project name so MahaRERA search matches cleanly."""
+    n = name.strip()
+    n = _PARENTHETICAL.sub("", n)  # drop trailing "(Phase 1)" etc
+    for suf in _CITY_SUFFIXES:
+        if n.lower().endswith(suf.lower()):
+            n = n[: -len(suf)].rstrip(" ,")
+    return n.strip()
+
 
 def _project_name(listing: Listing, project: Project | None) -> str | None:
     if project and project.name:
-        return project.name
+        return _clean_project_name(project.name)
     raw_name = listing.raw.get("project_name") if listing.raw else None
     if raw_name:
-        return raw_name
+        return _clean_project_name(raw_name)
     # Fall back to extracting from the title: "3 BHK in Skyline Heights, Kharadi" → "Skyline Heights"
     title = listing.title or ""
     if " in " in title:
         after = title.split(" in ", 1)[1]
-        return after.split(",")[0].strip()
+        return _clean_project_name(after.split(",")[0])
     return None
 
 

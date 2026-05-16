@@ -22,6 +22,10 @@ from homeagent.scrapers.nobroker import NoBrokerScraper, _parse_area, _parse_bhk
         ("1,25,00,000", 12_500_000),
         ("nonsense", None),
         ("", None),
+        # Regression: leading digits from a title like "3 BHK Apartment..." must NOT be
+        # interpreted as a 3-rupee price.
+        ("3 BHK Apartment for Sale in Geras Island of Joy, Wagholi Pune", None),
+        ("2.5 BHK Flat", None),
     ],
 )
 def test_parse_inr(text, expected):

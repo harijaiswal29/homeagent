@@ -32,6 +32,9 @@ class SearchCriteria:
     budget_max_inr: int
     localities: list[str]
     property_status: list[str] = field(default_factory=lambda: ["new", "resale"])
+    localities_exclude: list[str] = field(default_factory=list)
+    # Source-specific knobs (currently only consumed by the MahaRERA scraper).
+    rera_max_last_modified_months: int = 36
 
 
 @dataclass

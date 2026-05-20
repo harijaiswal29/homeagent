@@ -58,8 +58,12 @@ class RERASearchHit:
     rera_id: str
     project_name: str
     promoter: str | None
-    locality: str | None
+    locality: str | None  # actually the taluka (e.g. "Haveli"); kept under this name for backward compat
     detail_url: str | None
+    pincode: str | None = None
+    district: str | None = None
+    last_modified: str | None = None  # ISO date string ("YYYY-MM-DD") if present on the card
+    numeric_id: str | None = None  # internal MahaRERA project id (tail of detail_url, used by SPA APIs)
 
 
 # --------------- Pure parsers ---------------
@@ -102,9 +106,32 @@ def parse_search_results(html: str) -> list[RERASearchHit]:
             locality = district_link.text(strip=True) or None
 
         detail_url: str | None = None
+        numeric_id: str | None = None
         view = card.css_first('a[href*="public/project/view/"]')
         if view:
             detail_url = view.attributes.get("href")
+            if detail_url:
+                # Last path segment is the internal numeric project id (e.g. "5022")
+                tail = detail_url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0]
+                if tail.isdigit():
+                    numeric_id = tail
+
+        # Right-hand metadata columns: each `<div class="greyColor">Label</div><p>Value</p>` pair
+        # under a `<div class="col-xl-4">`. Walk by label to pull pincode / district / last-modified.
+        labeled: dict[str, str] = {}
+        for greycol in card.css("div.greyColor"):
+            label = greycol.text(strip=True)
+            parent = greycol.parent
+            if not parent:
+                continue
+            value_p = parent.css_first("p")
+            if value_p:
+                v = value_p.text(strip=True)
+                if v:
+                    labeled[label.lower()] = v
+        pincode = labeled.get("pincode")
+        district = labeled.get("district")
+        last_modified = labeled.get("last modified")
 
         hits.append(
             RERASearchHit(
@@ -113,6 +140,10 @@ def parse_search_results(html: str) -> list[RERASearchHit]:
                 promoter=promoter,
                 locality=locality,
                 detail_url=detail_url,
+                pincode=pincode,
+                district=district,
+                last_modified=last_modified,
+                numeric_id=numeric_id,
             )
         )
     return hits
@@ -171,7 +202,7 @@ def _fetch_page(project_name: str, page: int, *, use_cache: bool = True) -> str 
     return html
 
 
-def _paginated_search(project_name: str, *, use_cache: bool = True) -> list[RERASearchHit]:
+def paginated_search(project_name: str, *, use_cache: bool = True) -> list[RERASearchHit]:
     """Walk pages until we run out, or hit _MAX_PAGES, or a page yields no hits."""
     all_hits: list[RERASearchHit] = []
     total_pages: int | None = None
@@ -215,11 +246,11 @@ def lookup_project(project_name: str, *, use_cache: bool = True) -> RERAEntry | 
     # MahaRERA's text search is prefix-leaning and trips on long multi-word queries:
     # "Godrej Ivara" returns 0; "Godrej" returns 109 across 11 pages. Try the full name
     # first, then fall back to the first word and rely on _best_match to filter.
-    hits = _paginated_search(project_name, use_cache=use_cache)
+    hits = paginated_search(project_name, use_cache=use_cache)
     if not hits and " " in project_name:
         first_word = project_name.split()[0]
         if len(first_word) >= 3:
-            hits = _paginated_search(first_word, use_cache=use_cache)
+            hits = paginated_search(first_word, use_cache=use_cache)
 
     if not hits:
         log.info("RERA: no hits for %r", project_name)

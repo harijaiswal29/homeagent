@@ -47,6 +47,12 @@ def _scraper_instances(portal: str) -> list:
         all_scrapers["99acres"] = NinetyNineAcresScraper()
     except ImportError:
         pass
+    try:
+        from homeagent.scrapers.maharera import MahaReraScraper  # type: ignore
+
+        all_scrapers["maharera"] = MahaReraScraper()
+    except ImportError:
+        pass
 
     if portal == "all":
         return list(all_scrapers.values())
@@ -63,6 +69,8 @@ def _criteria_to_scraper(c: SearchCriteria) -> ScraperCriteria:
         budget_max_inr=c.budget_max_inr,
         localities=c.localities,
         property_status=c.property_status,
+        localities_exclude=c.localities_exclude,
+        rera_max_last_modified_months=c.rera_max_last_modified_months,
     )
 
 
@@ -84,6 +92,23 @@ def _raw_to_listing(raw: RawListing) -> Listing:
             **raw.extra,
         },
     )
+
+
+# --------------- Check ordering ---------------
+
+# Some checks produce signals others depend on; e.g., rera_match resolves a promoter
+# name that the legal check can use as a fallback when the listing has no builder
+# field. Keep rera_match first and legal last; preserve registration order for the
+# rest. Unknown names (newly added checks) slot in before legal.
+_CHECK_ORDER_HEAD = ("rera_match",)
+_CHECK_ORDER_TAIL = ("legal",)
+
+
+def _ordered_checks(checks: list) -> list:
+    head = [c for name in _CHECK_ORDER_HEAD for c in checks if c.name == name]
+    tail = [c for name in _CHECK_ORDER_TAIL for c in checks if c.name == name]
+    middle = [c for c in checks if c.name not in _CHECK_ORDER_HEAD + _CHECK_ORDER_TAIL]
+    return head + middle + tail
 
 
 # --------------- Graph nodes ---------------
@@ -152,7 +177,7 @@ def node_run_checks(state: AgentState) -> AgentState:
             ids = [l.id for l in db.list_listings(conn, unverified_only=True) if l.id is not None]
         state["listing_ids"] = ids
 
-    checks = list_checks()
+    checks = _ordered_checks(list_checks())
     log.info("running %d checks on %d listings", len(checks), len(ids))
 
     verified = 0
@@ -161,16 +186,24 @@ def node_run_checks(state: AgentState) -> AgentState:
             listing = db.get_listing(conn, lid)
             if not listing:
                 continue
+            # One context dict per listing — shared across that listing's checks so
+            # earlier checks (rera_match) can surface findings (promoter name) for
+            # later checks (legal) to use as a fallback signal.
+            context: dict = {"criteria": criteria}
             for check in checks:
                 try:
                     result = check.fn(
                         listing=listing,
                         project=None,
-                        context={"criteria": criteria},
+                        context=context,
                     )
                 except Exception as e:
                     log.warning("check %s failed for listing %d: %s", check.name, lid, e)
                     continue
+                if check.name == "rera_match" and result.verdict == "pass":
+                    promoter = (result.evidence or {}).get("promoter")
+                    if promoter:
+                        context["rera_promoter"] = promoter
                 db.upsert_analysis(
                     conn,
                     Analysis(

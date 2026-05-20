@@ -18,7 +18,7 @@ console = Console()
 
 @app.command()
 def ingest(
-    portal: str = typer.Option("all", help="nobroker|magicbricks|99acres|all"),
+    portal: str = typer.Option("all", help="nobroker|magicbricks|99acres|maharera|all"),
     limit: int = typer.Option(10, help="Max listings per portal"),
 ) -> None:
     """Scrape one or more portals and upsert listings into the DB."""
@@ -52,7 +52,7 @@ def report(
 
 @app.command(name="run-all")
 def run_all(
-    portal: str = typer.Option("all", help="nobroker|magicbricks|99acres|all"),
+    portal: str = typer.Option("all", help="nobroker|magicbricks|99acres|maharera|all"),
     limit: int = typer.Option(10, help="Max listings per portal"),
     top: int = typer.Option(10, help="Top-N ranked listings in the report"),
 ) -> None:

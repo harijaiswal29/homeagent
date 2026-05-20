@@ -26,6 +26,9 @@ include = [
     "Keshav Nagar",
     "Mundhwa",
 ]
+# Hard exclusions — listings whose locality matches any of these are dropped even
+# if a portal returns them. MahaRERA-source uses this to filter by pincode too.
+exclude = ["Hadapsar"]
 
 # Per-check weights for the composite score (must sum to ~1.0).
 [scoring]
@@ -33,3 +36,11 @@ rera_match = 0.40
 pricing = 0.25
 legal = 0.20
 locality_fit = 0.15
+
+# MahaRERA-as-discovery-source tuning.
+[rera]
+# Skip projects whose `Last Modified` date on the search card is older than this.
+# Long-stalled or lapsed projects rarely get updates; this is a freshness proxy
+# until we can fetch the per-project detail page (which would expose the actual
+# Registered/Lapsed status — currently behind a SPA we don't crack).
+max_last_modified_months = 36

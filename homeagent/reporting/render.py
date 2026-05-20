@@ -121,6 +121,15 @@ def render_report_markdown(
         builder = (l.raw or {}).get("builder")
         if project_name:
             lines.append(f"- **Project:** {project_name}{' (' + builder + ')' if builder else ''}")
+        if l.portal == "maharera":
+            raw = l.raw or {}
+            pin = raw.get("pincode") or "—"
+            last_mod = raw.get("last_modified") or "—"
+            rera_id = raw.get("rera_id") or l.portal_listing_id
+            lines.append(
+                f"- **Source:** MahaRERA registry (RERA `{rera_id}`, pincode {pin}, last updated {last_mod}) — "
+                "phone the builder for current price, possession date, and BHK configurations available."
+            )
         lines.append("")
         lines.append(narratives.get(l.id, ""))
         lines.append("")

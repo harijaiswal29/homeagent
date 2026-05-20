@@ -10,7 +10,9 @@ Personal Real Estate AI Agent. See `spec.md` for the high-level brief, `README.m
   for simple/server-rendered pages (MahaRERA results, anything paginated).
 
 ## Conventions
-- Keep LLM calls narrow. Only `verification/legal.py` and `reporting/render.py` invoke Claude.
+- Keep LLM calls narrow. Only `verification/legal.py` and `reporting/render.py` invoke an LLM.
+  Anthropic is the default; `legal.py` also supports Gemini (free tier) via
+  `HOMEAGENT_LEGAL_PROVIDER=gemini`.
 - Always use prompt caching on the system prompt for repeated Claude calls.
 - All scraper parsers must have a fixture-backed test in `tests/fixtures/` so tests run offline.
 - New verification checks go in `homeagent/verification/` and use `@register_check`.

@@ -14,6 +14,8 @@ sudo playwright install-deps chromium     # one-time system libs on Linux/WSL
 cp .env.example .env
 # (optional) edit .env and add your ANTHROPIC_API_KEY — without it, the legal check
 # returns "unknown" and report narratives fall back to a deterministic template.
+# (optional) to use Google's free Gemini tier for the legal check instead of Claude,
+# set HOMEAGENT_LEGAL_PROVIDER=gemini and GEMINI_API_KEY=... (from aistudio.google.com).
 
 # review and adjust search settings
 $EDITOR criteria.toml

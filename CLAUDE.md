@@ -21,6 +21,10 @@ Personal Real Estate AI Agent. See `spec.md` for the high-level brief, `README.m
 - `db.connect()` only auto-commits the schema init — raw `conn.execute("DELETE …")` or other
   ad-hoc writes need an explicit `conn.commit()` or they'll roll back when the context exits.
   The `upsert_*` / `insert_*` helpers already commit themselves.
+- Reports are dated, not overwritten. `node_render_report` writes
+  `reports/YYYY-MM-DD_HHMMSS.md` AND mirrors to `reports/latest.md` when called without an
+  explicit `report_path`; when callers pass `--out`/`report_path`, it writes only there and
+  does NOT touch `latest.md`. Don't reintroduce a "single fixed output file" default.
 
 ## Don't
 - Don't add a comm channel (WhatsApp/Email send) without explicit user ask — MVP is drafts-only.

@@ -41,13 +41,19 @@ def verify(
 @app.command()
 def report(
     top: int = typer.Option(10, help="Number of top-ranked listings to include"),
-    out: str = typer.Option("reports/latest.md", help="Where to write the Markdown report"),
+    out: str | None = typer.Option(
+        None,
+        help="Where to write the Markdown report (defaults to reports/<timestamp>.md plus reports/latest.md)",
+    ),
 ) -> None:
     """Generate a ranked Markdown report."""
     from homeagent.agent.graph import run_report
+    from homeagent.config import Settings
 
     path = run_report(top=top, out=out)
     console.print(f"[green]Report written to[/green] {path}")
+    if out is None:
+        console.print(f"[green]Also mirrored to[/green] {Settings().reports_dir / 'latest.md'}")
 
 
 @app.command(name="run-all")

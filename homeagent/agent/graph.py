@@ -10,6 +10,7 @@ so new checks added under `homeagent/verification/` are picked up automatically.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -251,16 +252,31 @@ def node_score_and_rank(state: AgentState) -> AgentState:
     return state
 
 
+def _timestamped_report_path(reports_dir: Path) -> Path:
+    return reports_dir / f"{datetime.now():%Y-%m-%d_%H%M%S}.md"
+
+
 def node_render_report(state: AgentState) -> AgentState:
     from homeagent.reporting.render import render_report_markdown
 
     top_n = state.get("top_n", 10)
     ids = (state.get("listing_ids") or [])[:top_n]
-    out = state.get("report_path") or str(Settings().reports_dir / "latest.md")
+
+    explicit_out = state.get("report_path")
+    reports_dir = Settings().reports_dir
+    if explicit_out:
+        primary = Path(explicit_out)
+        latest_mirror: Path | None = None
+    else:
+        primary = _timestamped_report_path(reports_dir)
+        latest_mirror = reports_dir / "latest.md"
 
     md = render_report_markdown(ids, criteria=state.get("criteria"))
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    Path(out).write_text(md, encoding="utf-8")
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    primary.write_text(md, encoding="utf-8")
+    if latest_mirror is not None:
+        latest_mirror.parent.mkdir(parents=True, exist_ok=True)
+        latest_mirror.write_text(md, encoding="utf-8")
 
     from homeagent.models import Report
     with db.connect() as conn:
@@ -273,8 +289,11 @@ def node_render_report(state: AgentState) -> AgentState:
             ),
         )
 
-    state["report_path"] = out
-    state.setdefault("summary", {})["report"] = out
+    state["report_path"] = str(primary)
+    summary = state.setdefault("summary", {})
+    summary["report"] = str(primary)
+    if latest_mirror is not None:
+        summary["report_latest"] = str(latest_mirror)
     return state
 
 
@@ -312,11 +331,13 @@ def run_verify(listing_id: int | None = None, all_unverified: bool = False) -> N
     print(f"verified: {out.get('summary', {}).get('verified', 0)} listings")
 
 
-def run_report(top: int = 10, out: str = "reports/latest.md") -> str:
-    state: AgentState = {"top_n": top, "report_path": out}
+def run_report(top: int = 10, out: str | None = None) -> str:
+    state: AgentState = {"top_n": top}
+    if out:
+        state["report_path"] = out
     node_score_and_rank(state)
     node_render_report(state)
-    return state.get("report_path", out)
+    return state.get("report_path", "")
 
 
 def run_pipeline(portal: str = "all", limit: int = 10, top: int = 10) -> dict:

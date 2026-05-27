@@ -23,8 +23,13 @@ $EDITOR criteria.toml
 # run end-to-end against live data (Magicbricks is the most reliable portal today)
 python -m homeagent ingest --portal magicbricks --limit 15
 python -m homeagent verify --all-unverified
-python -m homeagent report --top 10 --out reports/latest.md
+python -m homeagent report --top 10
 ```
+
+Each `report` run writes `reports/YYYY-MM-DD_HHMMSS.md` (a permanent, dated
+snapshot) and also mirrors the same content to `reports/latest.md` so the
+"newest one" is always at a stable path. Pass `--out path/to/file.md` to
+override and write to a single explicit path instead.
 
 Or all at once:
 
